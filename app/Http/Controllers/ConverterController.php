@@ -23,7 +23,7 @@ class ConverterController extends Controller
 
         if ($action === 'remove_bg') {
             $response = Http::withHeaders([
-                'X-Api-Key' => 'KUNCI_API_REMOVE_BG_ANDA',
+                'X-Api-Key' => 'a3kX5DrCcramFdXe6pKEjEr8',
             ])->attach(
                 'image_file', file_get_contents($file), $file->getClientOriginalName()
             )->post('https://api.remove.bg/v1.0/removebg');
