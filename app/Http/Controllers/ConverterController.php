@@ -12,13 +12,12 @@ class ConverterController extends Controller
         $file = $request->file('image');
         $action = $request->input('action');
 
-        // 1. Pastikan direktori penyimpanan storage/app/public sudah dibuat
         $storagePath = storage_path('app/public');
         if (!file_exists($storagePath)) {
             mkdir($storagePath, 0777, true);
         }
 
-        // 2. Logika Kompresi Gambar
+        // 1. Fitur Kompresi Gambar
         if ($action === 'compress') {
             $img = Image::read($file);
             $filename = 'compressed_' . time() . '.jpg';
@@ -26,27 +25,48 @@ class ConverterController extends Controller
 
             $img->toJpeg(60)->save($outputPath);
 
-            return response()->download($outputPath, 'hasil-kompresi.jpg')->deleteFileAfterSend(true);
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'url' => asset('storage/' . $filename),
+                    'filename' => $filename
+                ]);
+            }
+
+            return response()->download($outputPath, 'hasil-kompresi.jpg');
         }
 
-        // 3. Logika Hapus Background AI
+        // 2. Fitur Hapus Background AI
         if ($action === 'remove_bg') {
             $inputPath = $file->getRealPath();
             $filename = 'nobg_' . time() . '.png';
             $outputPath = $storagePath . '/' . $filename;
 
-            // Eksekusi perintah rembg dan tangkap pesan output/error dari terminal
-            $output = [];
-            $returnCode = 0;
-            exec("rembg i -m birefnet-general -a " . escapeshellarg($inputPath) . " " . escapeshellarg($outputPath) . " 2>&1", $output, $returnCode);
-            // Pengecekan: Apakah berkas berhasil dibuat oleh rembg?
-            if (file_exists($outputPath)) {
-                return response()->download($outputPath, 'hasil-no-bg.png')->deleteFileAfterSend(true);
+            $model = $request->input('mode', 'birefnet-general');
+            $allowedModels = ['birefnet-general', 'birefnet-portrait'];
+            if (!in_array($model, $allowedModels)) {
+                $model = 'birefnet-general';
             }
 
-            // Jika berkas tidak ditemukan, tampilkan pesan eror detail
+            $output = [];
+            $returnCode = 0;
+            exec("rembg i -m " . escapeshellarg($model) . " " . escapeshellarg($inputPath) . " " . escapeshellarg($outputPath) . " 2>&1", $output, $returnCode);
+
+            if (file_exists($outputPath)) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json([
+                        'success' => true,
+                        'url' => asset('storage/' . $filename),
+                        'filename' => 'hasil-no-bg-' . time() . '.png'
+                    ]);
+                }
+                return response()->download($outputPath, 'hasil-no-bg.png');
+            }
+
             $errorDetails = implode(" ", $output);
-            return response("Gagal memproses gambar AI. Detail eror Python/Rembg: <br><pre>" . $errorDetails . "</pre>", 500);
+            return response()->json(['success' => false, 'message' => $errorDetails], 500);
         }
+
+        return response()->json(['success' => false, 'message' => 'Aksi tidak valid.'], 400);
     }
 }
